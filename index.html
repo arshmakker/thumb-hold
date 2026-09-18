@@ -1,0 +1,871 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0b1026">
+<meta name="robots" content="noindex">
+<title>Thumb Hold</title>
+<style>
+  :root {
+    --night: #0b1026;
+    --night-2: #141a3a;
+    --amber: #f2c57c;
+    --amber-dim: rgba(242, 197, 124, 0.35);
+    --text: #e8e6f0;
+    --muted: #8f93b3;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    height: 100%; margin: 0; overflow: hidden;
+    background: var(--night); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    touch-action: none; user-select: none; -webkit-user-select: none;
+    -webkit-touch-callout: none; overscroll-behavior: none;
+  }
+  body { background: radial-gradient(120% 80% at 50% 0%, var(--night-2), var(--night) 70%); }
+  h1, .cue, .done-line { font-family: Georgia, "Times New Roman", serif; font-weight: 400; }
+  [hidden] { display: none !important; }
+
+  .screen {
+    position: fixed; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: max(24px, env(safe-area-inset-top)) 24px max(24px, env(safe-area-inset-bottom));
+  }
+
+  /* Start */
+  #start { gap: 20px; text-align: center; touch-action: auto; overflow-y: auto; }
+  #start h1 { font-size: 2rem; margin: 0; color: var(--amber); }
+  #options { width: min(100%, 340px); }
+  #options summary { list-style: none; color: var(--muted); font-size: 0.85rem; text-decoration: underline; padding: 8px; cursor: pointer; }
+  #options summary::-webkit-details-marker { display: none; }
+  #options fieldset { margin-top: 18px; width: 100%; }
+  #start p { margin: 0; max-width: 30ch; line-height: 1.5; color: var(--muted); }
+  #start #track-note { font-size: 0.75rem; opacity: 0.7; }
+  fieldset { border: 0; padding: 0; margin: 0; width: min(100%, 340px); text-align: left; }
+  legend { font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+  .seg { display: flex; gap: 6px; }
+  .seg label { flex: 1; }
+  .seg input { position: absolute; opacity: 0; pointer-events: none; }
+  .seg span {
+    display: block; text-align: center; padding: 11px 4px; border-radius: 10px;
+    border: 1px solid rgba(255,255,255,0.12); color: var(--muted); font-size: 0.9rem;
+  }
+  .seg input:checked + span { border-color: var(--amber); color: var(--amber); background: rgba(242,197,124,0.08); }
+  .seg input:focus-visible + span { outline: 2px solid var(--amber); outline-offset: 2px; }
+  button.primary {
+    font: inherit; font-size: 1.05rem; padding: 15px 36px; border-radius: 999px; border: 0;
+    background: var(--amber); color: #1a1430; font-weight: 600; margin-top: 6px;
+  }
+  button.link { font: inherit; font-size: 0.85rem; background: none; border: 0; color: var(--muted); text-decoration: underline; padding: 8px; }
+
+  /* Session */
+  #session { justify-content: space-between; }
+  .center { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 28px; }
+  .orb-wrap { position: relative; width: min(56vw, 240px); aspect-ratio: 1; }
+  .orb {
+    position: absolute; inset: 18%; border-radius: 50%;
+    background: radial-gradient(circle at 40% 35%, #ffe3ad, var(--amber) 45%, #b9853b 100%);
+    box-shadow: 0 0 60px 10px var(--amber-dim);
+    transform: scale(var(--breath, 1)); opacity: var(--orb-opacity, 0.35);
+    transition: opacity 0.8s ease;
+  }
+  svg.ring { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
+  .ring circle { fill: none; stroke-width: 2.5; }
+  .ring .track { stroke: rgba(255,255,255,0.08); }
+  .ring .fill { stroke: var(--tone, var(--amber)); stroke-linecap: round; transition: stroke-dashoffset 0.25s linear; }
+  #scene { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .center, .pads { position: relative; }
+  .cue { font-size: 1.5rem; min-height: 2.2em; text-align: center; color: var(--text); transition: opacity 0.6s ease; }
+  .cue small { display: block; font-family: -apple-system, sans-serif; font-size: 0.8rem; color: var(--muted); margin-top: 6px; }
+
+  .pads { display: flex; justify-content: space-between; width: 100%; max-width: 520px; padding: 0 4px 12px; }
+  .pads.single { justify-content: center; }
+  .pad {
+    width: 108px; height: 108px; border-radius: 50%;
+    border: 2px dashed rgba(242,197,124,0.5);
+    display: grid; place-items: center; color: var(--muted); font-size: 0.75rem; letter-spacing: 0.06em;
+    text-transform: uppercase; touch-action: none;
+    transition: background 0.3s ease, border-color 0.3s ease, transform 0.3s ease, box-shadow 0.3s ease;
+  }
+  .pad.down {
+    border-style: solid; border-color: var(--amber); color: transparent;
+    background: rgba(242,197,124,0.14); transform: scale(0.94);
+    box-shadow: 0 0 34px 4px var(--amber-dim);
+  }
+
+  #dim { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; transition: opacity 1.2s ease; }
+
+  /* Done */
+  #done { gap: 18px; text-align: center; background: #000; transition: opacity 2s ease; }
+  .done-line { font-size: 1.7rem; color: var(--amber); max-width: 16ch; line-height: 1.35; }
+  #done .sub { color: var(--muted); font-size: 0.9rem; max-width: 28ch; line-height: 1.5; }
+  #done.faded .done-line, #done.faded .sub, #done.faded .link { opacity: 0.18; transition: opacity 3s ease; }
+
+  /* After */
+  #after { gap: 12px; text-align: center; touch-action: auto; overflow-y: auto; background: var(--night); }
+  #after h1 { font-size: 1.5rem; margin: 0; color: var(--amber); max-width: 18ch; line-height: 1.3; }
+  #after p { margin: 0 0 8px; color: var(--muted); font-size: 0.9rem; }
+  #after .choice {
+    font: inherit; width: min(100%, 340px); padding: 14px; border-radius: 12px; text-align: center;
+    border: 1px solid rgba(255,255,255,0.12); background: none; color: var(--text);
+  }
+  #after .choice:active { border-color: var(--amber); color: var(--amber); }
+
+  /* Sky */
+  #sky { background: var(--night); justify-content: flex-end; text-align: center; }
+  #sky canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .sky-text { position: relative; padding-bottom: 7vh; display: flex; flex-direction: column; gap: 10px; align-items: center; }
+  .sky-text .done-line { font-size: 1.35rem; max-width: 22ch; }
+  .sky-text .sub { color: var(--muted); font-size: 0.85rem; }
+
+  /* Notes */
+  #notes { touch-action: auto; overflow-y: auto; justify-content: flex-start; gap: 14px; background: var(--night); user-select: text; -webkit-user-select: text; }
+  #notes h1 { font-size: 1.4rem; color: var(--amber); margin: 12px 0 0; }
+  table { border-collapse: collapse; font-size: 0.8rem; width: 100%; max-width: 560px; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid rgba(255,255,255,0.08); }
+  th { color: var(--muted); font-weight: 500; }
+  .table-scroll { width: 100%; overflow-x: auto; display: flex; justify-content: center; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .orb { transform: none; }
+    * { transition-duration: 0.01s !important; }
+  }
+</style>
+</head>
+<body>
+
+<section id="start" class="screen">
+  <h1>Thumb Hold</h1>
+  <p id="intro">Rest both thumbs on the circles and keep them there. While you hold, there is nothing else your phone can do.</p>
+
+  <details id="options">
+    <summary>Options</summary>
+  <fieldset>
+    <legend>Length</legend>
+    <div class="seg" data-name="t">
+      <label><input type="radio" name="t" value="30"><span>30s</span></label>
+      <label><input type="radio" name="t" value="60"><span>60s</span></label>
+      <label><input type="radio" name="t" value="90" checked><span>90s</span></label>
+      <label><input type="radio" name="t" value="180"><span>3 min</span></label>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>If you lift a thumb</legend>
+    <div class="seg" data-name="lift">
+      <label><input type="radio" name="lift" value="pause" checked><span>Wait</span></label>
+      <label><input type="radio" name="lift" value="decay"><span>Slip back</span></label>
+      <label><input type="radio" name="lift" value="reset"><span>Start over</span></label>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Thumbs</legend>
+    <div class="seg" data-name="thumbs">
+      <label><input type="radio" name="thumbs" value="2" checked><span>Two</span></label>
+      <label><input type="radio" name="thumbs" value="1"><span>One</span></label>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Visual</legend>
+    <div class="seg" data-name="viz">
+      <label><input type="radio" name="viz" value="blob" checked><span>Living light</span></label>
+      <label><input type="radio" name="viz" value="orb"><span>Orb</span></label>
+    </div>
+  </fieldset>
+  <fieldset>
+    <legend>Sound</legend>
+    <div class="seg" data-name="sound">
+      <label><input type="radio" name="sound" value="on" checked><span>On</span></label>
+      <label><input type="radio" name="sound" value="off"><span>Off</span></label>
+    </div>
+  </fieldset>
+  </details>
+
+  <button class="primary" id="begin">Begin</button>
+  <button class="link" id="open-notes">Past sessions</button>
+  <p id="track-note">Anonymous usage is recorded for this study.</p>
+</section>
+
+<section id="session" class="screen" hidden>
+  <canvas id="scene" aria-hidden="true"></canvas>
+  <div class="center">
+    <div class="orb-wrap">
+      <svg class="ring" viewBox="0 0 100 100" aria-hidden="true">
+        <circle class="track" cx="50" cy="50" r="48"/>
+        <circle class="fill" cx="50" cy="50" r="48" stroke-dasharray="301.6" stroke-dashoffset="301.6"/>
+      </svg>
+      <div class="orb"></div>
+    </div>
+    <div class="cue" id="cue" aria-live="polite"></div>
+  </div>
+  <div class="pads" id="pads">
+    <div class="pad" id="pad-l" role="button" aria-label="Left thumb">hold</div>
+    <div class="pad" id="pad-r" role="button" aria-label="Right thumb">hold</div>
+  </div>
+</section>
+
+<div id="dim"></div>
+
+<section id="done" class="screen" hidden>
+  <div class="done-line" id="done-line">Now put the phone down.</div>
+  <div class="sub" id="done-sub"></div>
+  <button class="link" id="again">Back to start</button>
+</section>
+
+<section id="after" class="screen" hidden>
+  <h1 id="after-q"></h1>
+  <p id="after-when"></p>
+  <button class="choice" data-v="down">Put the phone down</button>
+  <button class="choice" data-v="scroll">Went back to scrolling</button>
+  <button class="choice" data-v="phone">Something else on the phone</button>
+  <button class="choice" data-v="unsure">Don't remember</button>
+  <button class="link" data-v="skipped">Skip</button>
+</section>
+
+<section id="sky" class="screen" hidden>
+  <canvas id="sky-canvas" aria-hidden="true"></canvas>
+  <div class="sky-text" aria-live="polite">
+    <div class="done-line" id="sky-line"></div>
+    <div class="sub" id="sky-sub"></div>
+  </div>
+</section>
+
+<section id="notes" class="screen" hidden>
+  <h1>Past sessions</h1>
+  <div class="table-scroll"><table id="notes-table"></table></div>
+  <button class="link" id="clear-notes">Clear</button>
+  <button class="link" id="close-notes">Back</button>
+</section>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const RING = 301.6, GRACE = 2, IN = 4, OUT = 6, MAX_DIM = 0.78;
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const params = new URLSearchParams(location.search);
+
+  // Anonymous study analytics (PostHog, EU). Events only: no autocapture, no session replay, no cookies.
+  // The project key is a public write-only key, safe to commit. ?track=off disables it entirely.
+  const PH_KEY = 'phc_REPLACE_ME';
+  let phQueue = [];
+  let tracking = !PH_KEY.includes('REPLACE') && params.get('track') !== 'off';
+  function report(event, props, leaving) {
+    if (!tracking) return;
+    if (phQueue) return phQueue.push([event, props, new Date()]);
+    // An event fired as the tab is hidden has to go out now or it may never be sent.
+    posthog.capture(event, props, leaving ? { send_instantly: true, transport: 'sendBeacon' } : undefined);
+  }
+  if (tracking) {
+    const s = document.createElement('script');
+    s.async = true;
+    s.src = 'https://eu-assets.i.posthog.com/static/array.js';
+    s.onload = () => {
+      posthog.init(PH_KEY, {
+        api_host: 'https://eu.i.posthog.com', persistence: 'localStorage', person_profiles: 'identified_only',
+        autocapture: false, disable_session_recording: true, capture_pageview: true, capture_pageleave: true,
+      });
+      posthog.register({ mode: params.has('together') ? 'together' : 'solo', sky: params.get('sky') === 'off' ? 'off' : 'on' });
+      for (const [e, p, timestamp] of phQueue) posthog.capture(e, p, { timestamp });
+      phQueue = null;
+    };
+    s.onerror = () => { tracking = false; }; // blocked or offline: the prototype works without it
+    document.head.appendChild(s);
+  } else {
+    $('track-note').hidden = true;
+  }
+
+  // URL params preselect the start-screen options: ?t=60&lift=decay&thumbs=1
+  for (const name of ['t', 'lift', 'thumbs', 'viz', 'sound']) {
+    const v = params.get(name);
+    const input = v && document.querySelector(`input[name="${name}"][value="${CSS.escape(v)}"]`);
+    if (input) input.checked = true;
+  }
+  // A ?t= value that isn't one of the listed lengths (e.g. ?t=8 for quick testing) overrides the picker.
+  const tParam = Number(params.get('t'));
+  const customT = tParam > 0 && !document.querySelector(`input[name="t"][value="${tParam}"]`) ? tParam : 0;
+
+  // ?together=1 is the zero-backend probe of holding with someone: two people, one phone, one thumb each
+  // on the existing pads. Logged as its own mode so it never mixes into the solo numbers.
+  const together = params.has('together');
+  if (together) {
+    $('intro').textContent = 'Two people, one phone. Each rest a thumb on a circle and stay until the light is full.';
+    $('done-line').textContent = 'Now leave the phone here. Look up.';
+  }
+
+  const state = {
+    phase: 'start', duration: 90, lift: 'pause', thumbs: 2, viz: 'blob',
+    progress: 0, breath: 0, eased: 0, cycles: 0, away: 0, lifts: 0, held: false, everHeld: false,
+    startedAt: 0, last: 0,
+  };
+  const touching = { l: new Set(), r: new Set() };
+  let spaceDown = false, wakeLock = null, raf = 0;
+
+  const show = (id) => {
+    for (const s of document.querySelectorAll('.screen')) s.hidden = s.id !== id;
+  };
+  const picked = (name) => document.querySelector(`input[name="${name}"]:checked`).value;
+
+  const isHeld = () => {
+    if (spaceDown) return true;
+    const l = touching.l.size > 0, r = touching.r.size > 0;
+    return state.thumbs === 1 ? (l || r) : (l && r);
+  };
+
+  function bindPad(el, key) {
+    // Thumb position feeds the living-light scene; movement stirs it.
+    const track = (e) => {
+      const p = scene.pos[key];
+      scene.stir = Math.min(1, scene.stir + Math.hypot(e.clientX - p.x, e.clientY - p.y) / 40);
+      p.x = e.clientX; p.y = e.clientY;
+    };
+    el.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      el.setPointerCapture(e.pointerId);
+      touching[key].add(e.pointerId);
+      el.classList.add('down');
+      track(e);
+    });
+    el.addEventListener('pointermove', (e) => { if (touching[key].has(e.pointerId)) track(e); });
+    const release = (e) => {
+      touching[key].delete(e.pointerId);
+      if (touching[key].size === 0) el.classList.remove('down');
+    };
+    el.addEventListener('pointerup', release);
+    el.addEventListener('pointercancel', release);
+    el.addEventListener('lostpointercapture', release);
+  }
+  bindPad($('pad-l'), 'l');
+  bindPad($('pad-r'), 'r');
+
+  // Desktop testing: holding Space counts as holding every pad.
+  addEventListener('keydown', (e) => { if (e.code === 'Space' && state.phase === 'session') { e.preventDefault(); spaceDown = true; } });
+  addEventListener('keyup', (e) => { if (e.code === 'Space') spaceDown = false; });
+  addEventListener('contextmenu', (e) => e.preventDefault());
+  addEventListener('blur', () => { spaceDown = false; });
+
+  async function lockScreen(on) {
+    try {
+      if (on && 'wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen');
+      else if (!on && wakeLock) { await wakeLock.release(); wakeLock = null; }
+    } catch { /* needs a secure context; the prototype works without it */ }
+  }
+
+  // Living-light scene: a breathing blob that never quite repeats, fed by light flowing from each held thumb.
+  const canvas = $('scene'), ctx = canvas.getContext('2d');
+  const scene = {
+    t: 0, stir: 0, w: 0, h: 0, cx: 0, cy: 0, R: 0, spawn: 0,
+    e: { l: 0, r: 0 }, pos: { l: { x: 0, y: 0 }, r: { x: 0, y: 0 } }, sparks: [], motes: [],
+  };
+  const AMBER = [242, 197, 124], ROSE = [222, 150, 156], DUSK = [120, 150, 230];
+
+  function measure() {
+    const dpr = Math.min(devicePixelRatio || 1, 2);
+    scene.w = innerWidth; scene.h = innerHeight;
+    canvas.width = scene.w * dpr; canvas.height = scene.h * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const o = document.querySelector('.orb-wrap').getBoundingClientRect();
+    scene.cx = o.left + o.width / 2; scene.cy = o.top + o.height / 2; scene.R = o.width * 0.3;
+    for (const k of ['l', 'r']) {
+      if (touching[k].size) continue;
+      const p = $(state.thumbs === 1 ? 'pad-l' : `pad-${k}`).getBoundingClientRect();
+      scene.pos[k] = { x: p.left + p.width / 2, y: p.top + p.height / 2 };
+    }
+  }
+
+  function resetScene() {
+    Object.assign(scene, { t: 0, stir: 0, spawn: 0, sparks: [] });
+    scene.e.l = scene.e.r = 0;
+    measure();
+    scene.motes = reduced ? [] : Array.from({ length: 26 }, () => ({
+      x: Math.random() * scene.w, y: Math.random() * scene.h,
+      vx: (Math.random() - 0.5) * 10, vy: (Math.random() - 0.5) * 10,
+      r: 0.6 + Math.random() * 1.4, ph: Math.random() * 6.28,
+    }));
+  }
+
+  function drawScene(dt) {
+    const frac = Math.min(state.progress / state.duration, 1);
+    const slow = 1 - 0.55 * frac; // everything settles as the hold goes on
+    scene.t += dt * slow;
+    scene.stir *= Math.exp(-dt * 1.5);
+
+    const on = { l: spaceDown || touching.l.size > 0 };
+    on.r = state.thumbs === 1 ? on.l : (spaceDown || touching.r.size > 0);
+    for (const k of ['l', 'r']) scene.e[k] += ((on[k] ? 1 : 0) - scene.e[k]) * (1 - Math.exp(-dt * (on[k] ? 3 : 1.5)));
+    const energy = (scene.e.l + scene.e.r) / 2;
+
+    // Sunset rather than a straight blend, which would pass through grey.
+    const [from, to, k] = frac < 0.5 ? [AMBER, ROSE, frac * 2] : [ROSE, DUSK, frac * 2 - 1];
+    const tone = from.map((c, i) => Math.round(c + (to[i] - c) * k));
+    const rgba = (a, lift = 0) => `rgba(${tone.map((c) => Math.min(255, c + lift)).join(',')},${a.toFixed(3)})`;
+    document.documentElement.style.setProperty('--tone', `rgb(${tone.join(',')})`);
+
+    const { cx, cy, t } = scene;
+    // Under reduced motion the breath is carried by brightness instead of size.
+    const R = scene.R * (reduced ? 1 : 0.8 + 0.4 * state.eased);
+    const glowBreath = reduced ? 0.6 + 0.4 * state.eased : 1;
+    const ang = { l: Math.atan2(scene.pos.l.y - cy, scene.pos.l.x - cx), r: Math.atan2(scene.pos.r.y - cy, scene.pos.r.x - cx) };
+
+    ctx.clearRect(0, 0, scene.w, scene.h);
+
+    for (const m of scene.motes) {
+      m.x = (m.x + m.vx * dt * slow + scene.w) % scene.w;
+      m.y = (m.y + m.vy * dt * slow + scene.h) % scene.h;
+      ctx.fillStyle = rgba((0.06 + 0.12 * (0.5 + 0.5 * Math.sin(t * 0.8 + m.ph))) * (0.4 + 0.6 * energy), 40);
+      ctx.beginPath(); ctx.arc(m.x, m.y, m.r, 0, 6.283); ctx.fill();
+    }
+
+    // One glow per thumb, leaning toward its side, so letting go of one visibly drains that half.
+    for (const k of ['l', 'r']) {
+      const gx = cx + Math.cos(ang[k]) * R * 0.55, gy = cy + Math.sin(ang[k]) * R * 0.55;
+      const g = ctx.createRadialGradient(gx, gy, 0, gx, gy, R * 2.6);
+      g.addColorStop(0, rgba(0.3 * scene.e[k] * glowBreath)); g.addColorStop(1, rgba(0));
+      ctx.fillStyle = g; ctx.fillRect(0, 0, scene.w, scene.h);
+    }
+
+    if (!reduced) {
+      scene.spawn += dt * 5;
+      while (scene.spawn >= 1) {
+        scene.spawn -= 1;
+        for (const k of ['l', 'r']) {
+          if (!on[k] || (state.thumbs === 1 && k === 'r')) continue;
+          scene.sparks.push({ k, p: 0, v: 1 / (2.2 + Math.random() * 1.6), bend: (Math.random() - 0.5) * 140, r: 1 + Math.random() * 1.6, ...scene.pos[k] });
+        }
+      }
+      scene.sparks = scene.sparks.filter((s) => (s.p += dt * s.v * slow) < 1);
+      for (const s of scene.sparks) {
+        const dx = cx - s.x, dy = cy - s.y, len = Math.hypot(dx, dy) || 1;
+        const mx = s.x + dx / 2 - (dy / len) * s.bend, my = s.y + dy / 2 + (dx / len) * s.bend;
+        const u = 1 - s.p;
+        const x = u * u * s.x + 2 * u * s.p * mx + s.p * s.p * cx, y = u * u * s.y + 2 * u * s.p * my + s.p * s.p * cy;
+        ctx.fillStyle = rgba(0.75 * Math.sin(Math.PI * s.p) * scene.e[s.k], 50);
+        ctx.beginPath(); ctx.arc(x, y, s.r, 0, 6.283); ctx.fill();
+      }
+    }
+
+    // Incommensurate sine speeds keep the outline from ever exactly repeating.
+    const amp = reduced ? 0 : 0.03 + 0.06 * scene.stir + 0.02 * energy;
+    ctx.beginPath();
+    for (let i = 0; i <= 72; i++) {
+      const a = (i / 72) * 6.2832;
+      const n = 0.5 * Math.sin(3 * a + t * 0.7) + 0.3 * Math.sin(5 * a - t * 0.43 + 1.3) + 0.4 * Math.sin(2 * a + t * 0.29 + 4.1);
+      const lean = 0.08 * (scene.e.l * Math.max(0, Math.cos(a - ang.l)) ** 2 + scene.e.r * Math.max(0, Math.cos(a - ang.r)) ** 2);
+      const r = R * (1 + amp * n + lean);
+      ctx[i ? 'lineTo' : 'moveTo'](cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+    }
+    ctx.closePath();
+    const alpha = (0.28 + 0.72 * energy) * glowBreath;
+    const body = ctx.createRadialGradient(cx - R * 0.25, cy - R * 0.3, R * 0.05, cx, cy, R * 1.15);
+    body.addColorStop(0, rgba(alpha, 45)); body.addColorStop(0.5, rgba(alpha)); body.addColorStop(1, rgba(alpha * 0.55, -60));
+    ctx.fillStyle = body; ctx.fill();
+  }
+
+  addEventListener('resize', () => { if (state.phase === 'session' && state.viz === 'blob') measure(); });
+
+  function begin() {
+    Object.assign(state, {
+      phase: 'session',
+      duration: customT || Number(picked('t')),
+      lift: picked('lift'), thumbs: together ? 2 : Number(picked('thumbs')), viz: picked('viz'),
+      progress: 0, breath: 0, eased: 0, cycles: 0, away: 0, lifts: 0, held: false, everHeld: false,
+      startedAt: Date.now(), last: performance.now(),
+    });
+    touching.l.clear(); touching.r.clear();
+    report('hold_started', { duration: state.duration, lift: state.lift, thumbs: state.thumbs, viz: state.viz, sound: picked('sound'), hour: new Date().getHours() });
+    $('pad-r').hidden = state.thumbs === 1;
+    $('pads').classList.toggle('single', state.thumbs === 1);
+    show('session');
+    const blob = state.viz === 'blob';
+    canvas.hidden = !blob;
+    document.querySelector('.orb').hidden = blob;
+    document.documentElement.style.removeProperty('--tone');
+    $('cue').style.opacity = 1;
+    if (blob) resetScene();
+    startAudio();
+    lockScreen(true);
+    raf = requestAnimationFrame(tick);
+  }
+
+  // Generated music, no audio files. Two movements at once: each breath rises and falls (bell notes
+  // climb on the inhale and descend on the exhale over a pad that swells and settles), and the whole
+  // hold drifts toward sleep (notes get lower, fewer and quieter; upper pad voices drop away; the
+  // tone darkens) until only a low hum is left.
+  const SCALE = [146.83, 185.0, 220.0, 246.94, 293.66, 369.99, 440.0, 493.88, 587.33]; // D major pentatonic, D3 to D5
+  let ac = null, pad = null, tunedAt = 0, wasAudible = false;
+  function startAudio() {
+    if (picked('sound') === 'off') return;
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      ac = ac || new AC();
+      ac.resume();
+      const master = ac.createGain(); master.gain.value = 0;
+      master.connect(ac.destination);
+
+      // A room made of decaying noise gives the sound air, which is most of what makes it feel natural.
+      const len = Math.floor(ac.sampleRate * 3.2), impulse = ac.createBuffer(2, len, ac.sampleRate);
+      for (let ch = 0; ch < 2; ch++) {
+        const data = impulse.getChannelData(ch);
+        for (let n = 0; n < len; n++) data[n] = (Math.random() * 2 - 1) * Math.pow(1 - n / len, 2.6);
+      }
+      const room = ac.createConvolver(); room.buffer = impulse;
+      const wet = ac.createGain(); wet.gain.value = 0.55;
+      const bus = ac.createGain();
+      bus.connect(master); bus.connect(room); room.connect(wet); wet.connect(master);
+
+      const filter = ac.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = 400; filter.Q.value = 0.3;
+      filter.connect(bus);
+      const nodes = [], fades = [];
+      // Each pad voice is two sines a few cents apart, which beats slowly like a held string section.
+      // `sleep` is how early the voice drops away as the hold goes on; the root never leaves.
+      [[73.42, 0.5, 0], [146.83, 0.4, 0.3], [220, 0.26, 0.9], [293.66, 0.16, 1.4], [369.99, 0.09, 2.2]].forEach(([freq, level, sleep]) => {
+        const voice = ac.createGain(); voice.gain.value = level;
+        const lfo = ac.createOscillator(); lfo.frequency.value = 0.03 + Math.random() * 0.07;
+        const depth = ac.createGain(); depth.gain.value = level * 0.45;
+        lfo.connect(depth); depth.connect(voice.gain); lfo.start();
+        const fade = ac.createGain();
+        voice.connect(fade); fade.connect(filter);
+        for (const cents of [-5, 5]) {
+          const osc = ac.createOscillator(); osc.type = 'sine'; osc.frequency.value = freq; osc.detune.value = cents + (Math.random() - 0.5) * 3;
+          osc.connect(voice); osc.start(); nodes.push(osc);
+        }
+        nodes.push(lfo); fades.push([fade, sleep]);
+      });
+      pad = { master, filter, bus, nodes, fades };
+    } catch { pad = null; }
+  }
+
+  function bell(freq, when, level) {
+    for (const [mult, amount, decay] of [[1, 1, 4], [2, 0.18, 1.6]]) {
+      const osc = ac.createOscillator(); osc.type = 'sine'; osc.frequency.value = freq * mult;
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0, when);
+      g.gain.linearRampToValueAtTime(level * amount, when + 0.08);
+      g.gain.exponentialRampToValueAtTime(0.0001, when + decay);
+      osc.connect(g); g.connect(pad.bus);
+      osc.start(when); osc.stop(when + decay + 0.1);
+    }
+  }
+  // One phrase per half-breath: climbing through the inhale, descending through the exhale.
+  function phrase(rising) {
+    if (!pad) return;
+    const frac = Math.min(state.progress / state.duration, 1);
+    const count = frac < 0.35 ? 3 : frac < 0.65 ? 2 : frac < 0.88 ? 1 : 0;
+    const top = Math.round(8 - 5 * frac), span = rising ? IN : OUT;
+    for (let i = 0; i < count; i++) {
+      const idx = Math.max(0, rising ? top - (count - 1) + i : top - i);
+      bell(SCALE[idx], ac.currentTime + 0.15 + i * (span / (count + 0.6)), 0.16 * (1 - 0.5 * frac));
+    }
+  }
+
+  function tuneAudio(now) {
+    // The music lives only while every thumb is down: lifting even one silences it at once.
+    const audible = state.held;
+    if (!pad || (audible === wasAudible && now - tunedAt < 100)) return;
+    tunedAt = now; wasAudible = audible;
+    const frac = Math.min(state.progress / state.duration, 1);
+    const at = ac.currentTime;
+    pad.master.gain.cancelScheduledValues(at);
+    pad.master.gain.setTargetAtTime(audible ? (0.08 + 0.14 * state.eased) * (1 - 0.55 * frac) : 0, at, audible ? 0.5 : 0.06);
+    pad.filter.frequency.setTargetAtTime((300 + 700 * state.eased) * (1 - 0.6 * frac), at, 0.5);
+    for (const [fade, sleep] of pad.fades) fade.gain.setTargetAtTime(Math.max(0, 1 - frac * sleep), at, 1.5);
+  }
+  function stopAudio(seconds) {
+    if (!pad) return;
+    const { master, nodes } = pad;
+    pad = null;
+    master.gain.cancelScheduledValues(ac.currentTime);
+    master.gain.setTargetAtTime(0, ac.currentTime, seconds / 4);
+    setTimeout(() => { for (const n of nodes) { try { n.stop(); } catch {} } master.disconnect(); }, seconds * 1000 + 300);
+  }
+
+  function tick(now) {
+    const dt = Math.min((now - state.last) / 1000, 1);
+    state.last = now;
+    const held = isHeld();
+
+    if (held) {
+      // Coming back after a real break starts on a fresh inhale, never mid-breath.
+      if (state.away > GRACE) state.breath = 0;
+      if (!state.held && state.breath === 0) phrase(true);
+      state.everHeld = true;
+      state.away = 0;
+      state.progress += dt;
+      const before = state.breath;
+      if (state.breath + dt >= IN + OUT) state.cycles += 1;
+      state.breath = (state.breath + dt) % (IN + OUT);
+      if (state.breath < before) phrase(true);
+      else if (before < IN && state.breath >= IN) phrase(false);
+    } else {
+      if (state.held) {
+        state.lifts += 1;
+        if (navigator.vibrate) navigator.vibrate(15);
+        report('lift', { at: Math.round(state.progress), n: state.lifts, duration: state.duration, lift: state.lift });
+      }
+      if (state.everHeld) state.away += dt;
+      // A brief slip keeps the rhythm going so the breath never stutters.
+      if (state.everHeld && state.away <= GRACE) state.breath = (state.breath + dt) % (IN + OUT);
+      if (state.away > GRACE) {
+        if (state.lift === 'reset') state.progress = 0;
+        else if (state.lift === 'decay') state.progress = Math.max(0, state.progress - dt * 2);
+      }
+    }
+    state.held = held;
+    render();
+    tuneAudio(now);
+    if (state.viz === 'blob') drawScene(dt);
+
+    if (state.progress >= state.duration) return finish();
+    raf = requestAnimationFrame(tick);
+  }
+
+  function render() {
+    const frac = Math.min(state.progress / state.duration, 1);
+    document.querySelector('.ring .fill').style.strokeDashoffset = RING * (1 - frac);
+
+    const inhaling = state.breath < IN;
+    const b = inhaling ? state.breath / IN : 1 - (state.breath - IN) / OUT;
+    const eased = state.eased = 0.5 - 0.5 * Math.cos(Math.PI * b);
+    const root = document.documentElement.style;
+    root.setProperty('--breath', reduced ? 1 : (0.85 + 0.45 * eased).toFixed(3));
+    root.setProperty('--orb-opacity', state.held ? 1 : 0.35);
+
+    // The room gets darker the longer you stay; lifting brings the light back.
+    $('dim').style.opacity = state.held ? (MAX_DIM * frac).toFixed(3) : 0;
+
+    const cue = $('cue');
+    let html;
+    if (!state.everHeld) {
+      html = together ? 'Each rest a thumb on a circle' : state.thumbs === 1 ? 'Rest your thumb on the circle' : 'Rest both thumbs on the circles';
+    } else if (state.held || state.away < 0.4) {
+      html = inhaling ? 'Breathe in' : 'Breathe out';
+    } else if (state.away <= GRACE) {
+      html = 'Still here';
+    } else {
+      const tail = { pause: 'It will wait for you.', decay: 'The light is slipping back.', reset: 'We begin again.' }[state.lift];
+      html = `Come back<small>${tail}</small>`;
+    }
+    if (cue.innerHTML !== html) cue.innerHTML = html;
+    // After two breaths the light itself is the pacer; words only return if you let go.
+    if (state.viz === 'blob') cue.style.opacity = state.held && state.cycles >= 2 ? 0 : 1;
+  }
+
+  function finish() {
+    cancelAnimationFrame(raf);
+    state.phase = 'done';
+    if (navigator.vibrate) navigator.vibrate([40, 80, 40]);
+    stopAudio(5);
+    lockScreen(false);
+    const wall = Math.round((Date.now() - state.startedAt) / 1000);
+    saveSession({ completed: true, wall });
+    $('done-sub').textContent = state.lifts === 0
+      ? `${state.duration} seconds, without letting go.`
+      : `${state.duration} seconds held. You let go ${state.lifts} time${state.lifts === 1 ? '' : 's'} and came back.`;
+    $('dim').style.opacity = 0;
+    const done = $('done');
+    done.classList.remove('faded');
+    show('done');
+    setTimeout(() => done.classList.add('faded'), 6000);
+  }
+
+  function abandon() {
+    if (state.phase !== 'session') return;
+    cancelAnimationFrame(raf);
+    stopAudio(0.4);
+    lockScreen(false);
+    const wall = Math.round((Date.now() - state.startedAt) / 1000);
+    if (state.everHeld) saveSession({ completed: false, wall }, true);
+    else report('hold_never_touched', { duration: state.duration, wall }, true);
+    state.phase = 'start';
+    $('dim').style.opacity = 0;
+    show('start');
+  }
+
+  // Leaving the tab mid-session is the behaviour this experiment is about, so record it.
+  document.addEventListener('visibilitychange', () => { if (document.hidden) abandon(); else maybeAsk(); });
+
+  // The prototype can't see what happens after a hold, so it asks on the next visit.
+  // `gap` (seconds between the hold ending and coming back) is a signal on its own.
+  const ASK_WINDOW = 24 * 3600 * 1000;
+  let askedAt = 0;
+  function maybeAsk() {
+    if (state.phase === 'session') return;
+    const last = readSessions().at(-1);
+    if (!last || last.after) return;
+    const since = Date.now() - new Date(last.at).getTime();
+    if (since > ASK_WINDOW) return;
+    askedAt = Date.now();
+    $('after-q').textContent = last.mode === 'together' ? 'After you held together, what happened next?' : last.completed ? 'After your last hold, what did you do?' : 'You left partway. Where did you go?';
+    const mins = Math.round(since / 60000);
+    $('after-when').textContent = mins < 1 ? 'Less than a minute ago' : mins < 60 ? `${mins} min ago` : `${Math.round(mins / 60)} h ago`;
+    state.phase = 'start';
+    show('after');
+  }
+  function answerAfter(v) {
+    const sessions = readSessions();
+    const last = sessions.at(-1);
+    if (last) {
+      last.after = v;
+      last.gap = Math.round((askedAt - new Date(last.at).getTime()) / 1000);
+      report('after_answered', { answer: v, gap: last.gap, completed: last.completed, duration: last.duration, lift: last.lift, viz: last.viz, held: last.held });
+      try { localStorage.setItem('thumb-hold-sessions', JSON.stringify(sessions)); } catch {}
+    }
+    if (skyOn && last && v !== 'skipped') showSky(addMark(last.at, v));
+    else show('start');
+  }
+
+  // The sky: one mark per night, earned by answering honestly, not by the answer itself.
+  // A star if the phone went down, a cloud otherwise, so there is nothing to gain by lying.
+  // Seen for a few seconds after the check-in only; never after a hold, never on demand.
+  // ?sky=off is the comparison arm; ?sky=peek shows it on load for testing.
+  const skyOn = params.get('sky') !== 'off';
+  const LADLE = [[.12, .10, -1], [.22, .08, 0], [.31, .12, 1], [.38, .16, 2], [.40, .25, 3], [.52, .26, 4], [.53, .16, 5]];
+  const BANYAN = [
+    [.62, .92, -1], [.62, .84, 0], [.63, .76, 1], [.62, .68, 2], [.54, .62, 3], [.47, .57, 4], [.40, .55, 5], [.50, .50, 4],
+    [.45, .44, 7], [.70, .62, 3], [.77, .57, 9], [.84, .56, 10], [.74, .50, 9], [.79, .43, 12], [.62, .59, 3], [.61, .50, 14],
+    [.56, .42, 15], [.66, .41, 15], [.52, .35, 16], [.60, .33, 16], [.69, .32, 17], [.38, .64, 6], [.85, .66, 11],
+  ];
+  // The first 30 stars take these slots in order, so the two constellations draw themselves in.
+  const SLOTS = [...LADLE.map(([x, y, p]) => ({ x, y, p })), ...BANYAN.map(([x, y, p]) => ({ x, y, p: p < 0 ? -1 : p + LADLE.length }))];
+  const EDGES = [...SLOTS.map((sl, i) => [i, sl.p]).filter(([, b]) => b >= 0), [6, 3]];
+  let skyTimer = 0, skyRaf = 0;
+
+  function readSky() {
+    try { return JSON.parse(localStorage.getItem('thumb-hold-sky')) || []; } catch { return []; }
+  }
+  // A "night" runs until 4am, so a hold at 1am belongs to the evening before.
+  const nightOf = (iso) => new Date(new Date(iso).getTime() - 4 * 3600 * 1000).toLocaleDateString('en-CA');
+
+  function addMark(sessionAt, answer) {
+    const sky = readSky(), night = nightOf(sessionAt), kind = answer === 'down' ? 'star' : 'cloud';
+    let fresh = null;
+    const at = sky.findIndex((m) => m.night === night);
+    if (at < 0) {
+      fresh = { night, kind, x: 0.06 + Math.random() * 0.88, y: 0.05 + Math.random() * 0.9, r: 1.2 + Math.random() };
+      sky.push(fresh);
+    } else if (sky[at].kind === 'cloud' && kind === 'star') {
+      [fresh] = sky.splice(at, 1);
+      fresh.kind = 'star';
+      sky.push(fresh);
+    }
+    try { localStorage.setItem('thumb-hold-sky', JSON.stringify(sky)); } catch {}
+    return { sky, fresh };
+  }
+
+  function showSky({ sky, fresh }) {
+    const stars = sky.filter((m) => m.kind === 'star').length;
+    $('sky-line').textContent = !fresh ? 'That night is already in the sky.'
+      : fresh.kind === 'cloud' ? 'A cloud drifts in. It belongs here too.'
+      : stars === LADLE.length ? 'The Ladle is complete.'
+      : stars === SLOTS.length ? 'The Banyan is complete.' : 'A new star.';
+    $('sky-sub').textContent = stars < LADLE.length ? 'Seven stars make the Ladle.' : stars < SLOTS.length ? 'Thirty make the Banyan.' : '';
+    show('sky');
+
+    const cv = $('sky-canvas'), c = cv.getContext('2d');
+    const dpr = Math.min(devicePixelRatio || 1, 2), w = innerWidth, h = innerHeight;
+    cv.width = w * dpr; cv.height = h * dpr; c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const t0 = performance.now();
+    const frame = (now) => {
+      drawSky(c, w, h, sky, fresh, (now - t0) / 1000);
+      if (!reduced) skyRaf = requestAnimationFrame(frame);
+    };
+    frame(reduced ? t0 + 5000 : t0);
+    skyTimer = setTimeout(closeSky, 3800);
+  }
+  function closeSky() {
+    clearTimeout(skyTimer); cancelAnimationFrame(skyRaf);
+    if (!$('sky').hidden) show('start');
+  }
+  $('sky').addEventListener('click', closeSky);
+
+  function drawSky(c, w, h, sky, fresh, age) {
+    c.clearRect(0, 0, w, h);
+    // The new mark arrives a beat after the sky does.
+    const arrive = Math.min(1, Math.max(0, (age - 0.6) / 1.5));
+    const placed = [];
+    let si = 0;
+    for (const m of sky) {
+      const slot = m.kind === 'star' ? SLOTS[si] : null;
+      const pt = { m, x: (slot || m).x * w, y: (slot || m).y * h * 0.74, slot: m.kind === 'star' ? si++ : -1 };
+      placed.push(pt);
+    }
+    const bySlot = new Map(placed.filter((pt) => pt.slot >= 0).map((pt) => [pt.slot, pt]));
+    const stars = si;
+
+    for (const [a, b] of EDGES) {
+      const pa = bySlot.get(a), pb = bySlot.get(b);
+      if (!pa || !pb) continue;
+      const complete = stars >= (a < LADLE.length ? LADLE.length : SLOTS.length);
+      const fade = pa.m === fresh || pb.m === fresh ? arrive : 1;
+      c.strokeStyle = `rgba(242,197,124,${((complete ? 0.4 : 0.16) * fade).toFixed(3)})`;
+      c.lineWidth = 1;
+      c.beginPath(); c.moveTo(pa.x, pa.y); c.lineTo(pb.x, pb.y); c.stroke();
+    }
+
+    placed.forEach((pt, i) => {
+      const fade = pt.m === fresh ? arrive : 1;
+      if (pt.m.kind === 'cloud') {
+        const g = c.createRadialGradient(pt.x, pt.y, 0, pt.x, pt.y, 9);
+        g.addColorStop(0, `rgba(143,147,179,${(0.22 * fade).toFixed(3)})`); g.addColorStop(1, 'rgba(143,147,179,0)');
+        c.fillStyle = g; c.beginPath(); c.arc(pt.x, pt.y, 9, 0, 6.283); c.fill();
+        return;
+      }
+      const a = (reduced ? 0.9 : 0.75 + 0.25 * Math.sin(age * 1.3 + i * 2.1)) * fade;
+      const g = c.createRadialGradient(pt.x, pt.y, 0, pt.x, pt.y, pt.m.r * 5);
+      g.addColorStop(0, `rgba(242,197,124,${(0.35 * a).toFixed(3)})`); g.addColorStop(1, 'rgba(242,197,124,0)');
+      c.fillStyle = g; c.beginPath(); c.arc(pt.x, pt.y, pt.m.r * 5, 0, 6.283); c.fill();
+      c.fillStyle = `rgba(255,236,200,${a.toFixed(3)})`;
+      c.beginPath(); c.arc(pt.x, pt.y, pt.m.r, 0, 6.283); c.fill();
+      if (pt.m === fresh && arrive > 0 && arrive < 1) {
+        c.strokeStyle = `rgba(242,197,124,${(0.5 * (1 - arrive)).toFixed(3)})`;
+        c.beginPath(); c.arc(pt.x, pt.y, 4 + arrive * 26, 0, 6.283); c.stroke();
+      }
+    });
+  }
+  for (const b of document.querySelectorAll('#after [data-v]')) b.addEventListener('click', () => answerAfter(b.dataset.v));
+
+  function readSessions() {
+    try { return JSON.parse(localStorage.getItem('thumb-hold-sessions')) || []; } catch { return []; }
+  }
+  function saveSession(extra, leaving) {
+    const row = {
+      at: new Date().toISOString(), duration: state.duration, lift: state.lift, thumbs: state.thumbs, viz: state.viz, sound: picked('sound'), mode: together ? 'together' : 'solo', sky: skyOn ? 'on' : 'off',
+      held: Math.round(state.progress), lifts: state.lifts, ...extra,
+    };
+    try { localStorage.setItem('thumb-hold-sessions', JSON.stringify([...readSessions(), row].slice(-50))); } catch {}
+    report('hold_ended', row, leaving);
+  }
+
+  function openNotes() {
+    const rows = readSessions().reverse();
+    const table = $('notes-table');
+    table.replaceChildren();
+    const head = table.insertRow();
+    for (const h of ['When', 'Goal', 'Held', 'Lifts', 'Took', 'Lift rule', 'Thumbs', 'Visual', 'Sound', 'Mode', 'Sky', 'Finished', 'After', 'Back in']) {
+      const th = document.createElement('th'); th.textContent = h; head.appendChild(th);
+    }
+    for (const r of rows) {
+      const tr = table.insertRow();
+      const cells = [new Date(r.at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }),
+        `${r.duration}s`, `${r.held}s`, r.lifts, `${r.wall}s`, r.lift, r.thumbs, r.viz || 'orb', r.sound || '', r.mode || 'solo', r.sky || '', r.completed ? 'yes' : 'left',
+        r.after || '', r.gap == null ? '' : r.gap < 90 ? `${r.gap}s` : `${Math.round(r.gap / 60)}m`];
+      for (const c of cells) tr.insertCell().textContent = c;
+    }
+    if (!rows.length) table.insertRow().insertCell().textContent = 'No sessions yet.';
+    show('notes');
+  }
+
+  $('begin').addEventListener('click', begin);
+  $('again').addEventListener('click', () => { state.phase = 'start'; show('start'); });
+  $('open-notes').addEventListener('click', openNotes);
+  $('close-notes').addEventListener('click', () => show('start'));
+  $('clear-notes').addEventListener('click', () => { try { localStorage.removeItem('thumb-hold-sessions'); } catch {} openNotes(); });
+  if (params.get('sky') === 'peek') showSky({ sky: readSky(), fresh: null });
+  else maybeAsk();
+})();
+</script>
+</body>
+</html>
