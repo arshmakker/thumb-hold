@@ -249,7 +249,7 @@
 
   // Anonymous study analytics (PostHog, EU). Events only: no autocapture, no session replay, no cookies.
   // The project key is a public write-only key, safe to commit. ?track=off disables it entirely.
-  const PH_KEY = 'phc_REPLACE_ME';
+  const PH_KEY = 'phc_uiFJbcDfzXBgLSte7GPkyQ8EtfuTbctbKExCiP8nGDVj';
   let phQueue = [];
   let tracking = !PH_KEY.includes('REPLACE') && params.get('track') !== 'off';
   function report(event, props, leaving) {
